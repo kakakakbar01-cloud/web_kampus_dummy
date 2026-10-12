@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portal Akademik Semu</title>
+<style>
+:root{--ac:#4f46e5;--bg:#f3f4fb;--card:#fff;--tx:#1f2430;--mut:#6b7280;--bd:#e3e5ef;--ok:#166534;--okb:#dcfce7;--er:#991b1b;--erb:#fee2e2}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--tx)}
+h1,h2{margin:.2em 0 .4em}
+.muted{color:var(--mut);font-size:.92em}
+.login{min-height:100vh;display:grid;place-items:center;padding:16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:24px;width:100%;max-width:420px;box-shadow:0 4px 18px rgba(79,70,229,.08)}
+label{display:block;margin:12px 0;font-size:.92em;font-weight:600}
+input,select,textarea{display:block;width:100%;margin-top:6px;padding:10px;border:1px solid var(--bd);border-radius:8px;font:inherit;background:#fff}
+textarea{min-height:80px;resize:vertical}
+button{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer}
+button:hover{filter:brightness(1.08)}
+button.ghost{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+button.danger{background:#dc2626}
+button.sm{padding:5px 10px;font-size:.85em;margin-right:4px}
+.alert{padding:10px 12px;border-radius:8px;margin:12px 0;font-size:.92em}
+.alert.err{background:var(--erb);color:var(--er)}
+.alert.ok{background:var(--okb);color:var(--ok)}
+details{margin-top:16px;font-size:.88em}
+header{background:var(--ac);color:#fff;display:flex;justify-content:space-between;align-items:center;padding:12px 20px;flex-wrap:wrap;gap:8px}
+header .who{display:flex;align-items:center;gap:10px}
+header button.ghost{color:#fff;border-color:#fff}
+nav{background:#fff;border-bottom:1px solid var(--bd);padding:0 16px;display:flex;gap:4px;overflow-x:auto}
+.tab{background:transparent;color:var(--mut);border-radius:0;border-bottom:3px solid transparent}
+.tab.on{color:var(--ac);border-bottom-color:var(--ac)}
+main{max-width:900px;margin:20px auto;padding:0 16px}
+.panel{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:20px}
+.badge{background:#e0e7ff;color:#3730a3;border-radius:99px;padding:2px 9px;font-size:.78em;font-weight:600}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--bd);font-size:.93em}
+th{color:var(--mut);font-weight:600}
+.post{border:1px solid var(--bd);border-radius:10px;padding:10px 14px;margin:10px 0;background:#fafbff}
+.post p{margin:6px 0 0;white-space:pre-wrap;word-break:break-word}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+code{background:#eef0fa;padding:2px 6px;border-radius:5px;word-break:break-all}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* ========= KONFIGURASI (ubah supaya data milikmu unik) ========= */
+const CONFIG = { campusName: "Universitas Nusantara Semu", portalName: "Portal Akademik Semu" };
+const COURSES = ["Pemrograman Web", "Basis Data", "Keamanan Informasi", "Jaringan Komputer"];
+const DEMO = [
+  { username: "admin.semu",    pass: "Admin#Semu2026",  role: "admin",     name: "Admin Semu" },
+  { username: "dosen.rahma",   pass: "Dosen#Rahma26",   role: "dosen",     name: "Dr. Rahma Wulandari (fiktif)" },
+  { username: "dosen.bima",    pass: "Dosen#Bima26",    role: "dosen",     name: "Bima Santoso, M.Kom (fiktif)" },
+  { username: "mhs.arkana",    pass: "Mhs#Arkana26",    role: "mahasiswa", name: "Arkana Pratama (fiktif)",  nim: "MHS-0001" },
+  { username: "mhs.zahra",     pass: "Mhs#Zahra26",     role: "mahasiswa", name: "Zahra Kinanti (fiktif)",   nim: "MHS-0002" },
+  { username: "mhs.dimas",     pass: "Mhs#Dimas26",     role: "mahasiswa", name: "Dimas Ardiansyah (fiktif)",nim: "MHS-0003" }
+];
+
+/* ========= UTIL ========= */
+const KEY = "kp_db_v1", TOK = "kp_token";
+let db, state = { user: null, tab: "", msg: "", msgType: "err", flash: "", flashType: "ok", course: "" };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = t => new Date(t).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
+const uid = () => Math.random().toString(36).slice(2, 10);
+const userById = id => db.users.find(u => u.id === id);
+const save = () => localStorage.setItem(KEY, JSON.stringify(db));
+const opts = (arr, sel) => arr.map(x => `<option ${x === sel ? "selected" : ""}>${esc(x)}</option>`).join("");
+
+async function sha(s) {
+  if (window.crypto && crypto.subtle) {
+    const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+    return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("");
+  }
+  let h = 5381; for (const ch of s) h = ((h << 5) + h + ch.charCodeAt(0)) >>> 0; return "f" + h; // cadangan
+}
+function newToken() {
+  const a = new Uint8Array(16); crypto.getRandomValues(a);
+  return [...a].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+function flash(m, t = "ok") { state.flash = m; state.flashType = t; }
+function need(role) { if (!state.user || state.user.role !== role) { flash("Aksi tidak diizinkan untuk peran Anda.", "err"); render(); return false; } return true; }
+
+/* ========= DATABASE (localStorage, data sintetis) ========= */
+async function initDb() {
+  const raw = localStorage.getItem(KEY);
+  if (raw) { db = JSON.parse(raw); return; }
+  db = { users: [], grades: [], submissions: [], posts: [], sessions: {} };
+  for (const d of DEMO) db.users.push({ id: uid(), username: d.username, name: d.name, role: d.role, nim: d.nim || "", passHash: await sha(d.pass) });
+  const dosen = db.users.filter(u => u.role === "dosen");
+  const mhs = db.users.filter(u => u.role === "mahasiswa");
+  const scores = [[85, 78, 90], [72, 88, 81], [93, 69, 77]];
+  mhs.forEach((m, i) => scores[i].forEach((s, j) => db.grades.push({
+    id: uid(), studentId: m.id, course: COURSES[j], item: j === 1 ? "UTS" : "Tugas 1", score: s, by: dosen[j % dosen.length].id
+  })));
+  db.posts.push({ id: uid(), userId: dosen[0].id, course: COURSES[0], text: "Selamat datang di forum Pemrograman Web. Silakan bertanya di sini.", at: Date.now() - 86400000 });
+  save();
+}
+function restore() {
+  const t = localStorage.getItem(TOK);
+  const id = t && db.sessions[t];
+  const u = id && userById(id);
+  if (u) { state.user = u; state.tab = TABS[u.role][0][0]; }
+}
+
+/* ========= TAB PER PERAN ========= */
+const TABS = {
+  mahasiswa: [["nilai", "Nilai"], ["tugas", "Tugas"], ["diskusi", "Diskusi"], ["profil", "Profil"]],
+  dosen:     [["beri", "Beri Nilai"], ["masuk", "Tugas Masuk"], ["diskusi", "Diskusi"], ["profil", "Profil"]],
+  admin:     [["akun", "Kelola Akun"], ["diskusi", "Diskusi"], ["profil", "Profil"]]
+};
+
+/* ========= TAMPILAN ========= */
+const table = (h, rows) => rows.length
+  ? `<div class="tw"><table><thead><tr>${h.map(x => `<th>${esc(x)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c && c.raw ? c.raw : esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
+  : `<p class="muted">Belum ada data.</p>`;
+
+const views = {
+  nilai() {
+    const g = db.grades.filter(x => x.studentId === state.user.id);
+    const avg = g.length ? (g.reduce((a, b) => a + b.score, 0) / g.length).toFixed(1) : "-";
+    return `<h2>Nilai Saya</h2><p class="muted">Rata-rata: <strong>${avg}</strong></p>` +
+      table(["Mata kuliah", "Komponen", "Nilai", "Dosen"], g.map(x => [x.course, x.item, x.score, userById(x.by)?.name || "-"]));
+  },
+  tugas() {
+    const s = db.submissions.filter(x => x.studentId === state.user.id).sort((a, b) => b.at - a.at);
+    return `<h2>Unggah Tugas</h2>
+    <form data-form="upload"><div class="row">
+      <label>Mata kuliah<select name="c">${opts(COURSES)}</select></label>
+      <label>Judul tugas<input name="t" required maxlength="80"></label>
+      <label>Berkas (maks 2 MB)<input name="f" type="file" required></label></div>
+      <button>Unggah</button></form>
+      <h2 style="margin-top:24px">Riwayat</h2>` +
+      table(["Waktu", "Mata kuliah", "Judul", "Berkas"], s.map(x => [fmt(x.at), x.course, x.title, `${x.fileName} (${(x.fileSize / 1024).toFixed(1)} KB)`]));
+  },
+  diskusi() {
+    const c = state.course || COURSES[0];
+    const ps = db.posts.filter(p => p.course === c).sort((a, b) => b.at - a.at);
+    return `<h2>Diskusi</h2>
+    <label>Mata kuliah<select data-act="course">${opts(COURSES, c)}</select></label>
+    <form data-form="post"><input type="hidden" name="c" value="${esc(c)}">
+      <textarea name="t" required maxlength="500" placeholder="Tulis komentar..."></textarea><button>Kirim</button></form>` +
+      (ps.map(p => { const u = userById(p.userId); return `<div class="post"><b>${esc(u?.name || "(akun dihapus)")}</b> <span class="badge">${esc(u?.role || "-")}</span> <span class="muted">${fmt(p.at)}</span><p>${esc(p.text)}</p></div>`; }).join("") || `<p class="muted">Belum ada diskusi.</p>`);
+  },
+  beri() {
+    const mhs = db.users.filter(u => u.role === "mahasiswa");
+    const g = [...db.grades].reverse().slice(0, 15);
+    return `<h2>Beri Nilai</h2>
+    <form data-form="grade"><div class="row">
+      <label>Mahasiswa<select name="s">${mhs.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join("")}</select></label>
+      <label>Mata kuliah<select name="c">${opts(COURSES)}</select></label>
+      <label>Komponen<input name="i" required maxlength="40" placeholder="UTS / Tugas 2"></label>
+      <label>Nilai (0-100)<input name="n" type="number" min="0" max="100" required></label></div>
+      <button>Simpan nilai</button></form>
+      <h2 style="margin-top:24px">Nilai terbaru</h2>` +
+      table(["Mahasiswa", "Mata kuliah", "Komponen", "Nilai"], g.map(x => [userById(x.studentId)?.name || "-", x.course, x.item, x.score]));
+  },
+  masuk() {
+    const s = [...db.submissions].sort((a, b) => b.at - a.at);
+    return `<h2>Tugas Masuk</h2>` + table(["Waktu", "Mahasiswa", "Mata kuliah", "Judul", "Berkas"],
+      s.map(x => [fmt(x.at), userById(x.studentId)?.name || "-", x.course, x.title, x.fileName]));
+  },
+  akun() {
+    return `<h2>Kelola Akun</h2>` + table(["Username", "Nama", "Peran", "Aksi"],
+      db.users.map(u => [u.username, u.name, u.role, { raw: `<button class="sm ghost" data-act="reset" data-v="${u.id}">Reset sandi</button>${u.id === state.user.id ? "" : `<button class="sm danger" data-act="del" data-v="${u.id}">Hapus</button>`}` }])) +
+      `<h2 style="margin-top:24px">Tambah Akun</h2>
+      <form data-form="addUser"><div class="row">
+        <label>Username<input name="u" required maxlength="30"></label>
+        <label>Nama<input name="n" required maxlength="60"></label>
+        <label>Peran<select name="r"><option>mahasiswa</option><option>dosen</option><option>admin</option></select></label>
+        <label>Sandi (min 8)<input name="p" type="password" required minlength="8"></label></div>
+        <button>Tambah</button></form>`;
+  },
+  profil() {
+    const u = state.user, t = localStorage.getItem(TOK) || "-";
+    return `<h2>Profil</h2>
+    <p><b>${esc(u.name)}</b> <span class="badge">${esc(u.role)}</span><br><span class="muted">Username: ${esc(u.username)}${u.nim ? " · " + esc(u.nim) : ""}</span></p>
+    <p class="muted">Token sesi aktif (ditampilkan untuk keperluan latihan):<br><code>${esc(t)}</code></p>
+    <h2 style="margin-top:24px">Ubah Sandi</h2>
+    <form data-form="chpass"><div class="row">
+      <label>Sandi lama<input name="o" type="password" required></label>
+      <label>Sandi baru (min 8)<input name="n" type="password" required minlength="8"></label></div>
+      <button>Ubah sandi</button></form>`;
+  }
+};
+
+function loginView() {
+  return `<div class="login"><div class="card">
+    <h1>${esc(CONFIG.portalName)}</h1>
+    <p class="muted">${esc(CONFIG.campusName)}. Portal fiktif untuk latihan, seluruh data sintetis.</p>
+    ${state.msg ? `<div class="alert ${state.msgType}">${esc(state.msg)}</div>` : ""}
+    <form data-form="login">
+      <label>Username<input name="u" required autocomplete="username"></label>
+      <label>Sandi<input name="p" type="password" required autocomplete="current-password"></label>
+      <button>Masuk</button></form>
+    <details><summary>Akun demo (data sintetis)</summary>
+      ${table(["Username", "Sandi", "Peran"], DEMO.map(d => [d.username, d.pass, d.role]))}
+      <p class="muted">Daftar ini statis; tidak ikut berubah bila sandi diganti.</p></details>
+  </div></div>`;
+}
+
+function shell() {
+  const u = state.user;
+  return `<header><strong>${esc(CONFIG.portalName)}</strong>
+    <div class="who">${esc(u.name)} <span class="badge">${esc(u.role)}</span><button class="ghost" data-act="logout">Keluar</button></div></header>
+    <nav>${TABS[u.role].map(t => `<button class="tab ${state.tab === t[0] ? "on" : ""}" data-act="tab" data-v="${t[0]}">${t[1]}</button>`).join("")}</nav>
+    <main>${state.flash ? `<div class="alert ${state.flashType}">${esc(state.flash)}</div>` : ""}<div class="panel">${views[state.tab]()}</div></main>`;
+}
+function render() { document.getElementById("app").innerHTML = state.user ? shell() : loginView(); }
+
+/* ========= LOGIKA ========= */
+async function doLogin(u, p) {
+  const h = await sha(p);
+  const user = db.users.find(x => x.username === u && x.passHash === h);
+  /* [KERENTANAN #1] Sandi tanpa pembatasan percobaan:
+     tidak ada penghitung gagal, penundaan, CAPTCHA, maupun penguncian akun. */
+  if (!user) { state.msg = "Username atau sandi salah."; state.msgType = "err"; render(); return; }
+  const token = newToken();
+  db.sessions[token] = user.id; save();
+  localStorage.setItem(TOK, token);
+  state.user = user; state.tab = TABS[user.role][0][0]; state.msg = ""; state.flash = "";
+  render();
+}
+function logout() {
+  /* [KERENTANAN #2] Sesi tetap aktif setelah logout:
+     token hanya dihapus dari browser, tetapi db.sessions[token] TIDAK dihapus,
+     jadi token lama tetap valid bila disalin sebelumnya. */
+  localStorage.removeItem(TOK);
+  state.user = null; state.msg = "Anda telah keluar."; state.msgType = "ok"; state.flash = "";
+  render();
+}
+
+const forms = {
+  async login(d) { await doLogin(d.u.trim(), d.p); },
+  async upload(d, f) {
+    if (!need("mahasiswa")) return;
+    const file = d.f;
+    if (!file || !file.name) flash("Pilih berkas terlebih dahulu.", "err");
+    else if (file.size > 2 * 1024 * 1024) flash("Ukuran berkas melebihi 2 MB.", "err");
+    else {
+      db.submissions.push({ id: uid(), studentId: state.user.id, course: d.c, title: d.t.trim(), fileName: file.name, fileSize: file.size, at: Date.now() });
+      save(); flash("Tugas berhasil diunggah (hanya metadata berkas yang disimpan).");
+    }
+    render();
+  },
+  async post(d) {
+    const t = d.t.trim(); if (!t) return;
+    db.posts.push({ id: uid(), userId: state.user.id, course: d.c, text: t, at: Date.now() });
+    save(); flash("Komentar terkirim."); render();
+  },
+  async grade(d) {
+    if (!need("dosen")) return;
+    const n = Number(d.n);
+    if (!Number.isInteger(n) || n < 0 || n > 100) { flash("Nilai harus bilangan bulat 0-100.", "err"); render(); return; }
+    db.grades.push({ id: uid(), studentId: d.s, course: d.c, item: d.i.trim(), score: n, by: state.user.id });
+    save(); flash("Nilai tersimpan."); render();
+  },
+  async addUser(d) {
+    if (!need("admin")) return;
+    const un = d.u.trim();
+    if (db.users.some(x => x.username === un)) { flash("Username sudah dipakai.", "err"); render(); return; }
+    db.users.push({ id: uid(), username: un, name: d.n.trim(), role: d.r, nim: "", passHash: await sha(d.p) });
+    save(); flash("Akun ditambahkan."); render();
+  },
+  async chpass(d) {
+    const u = userById(state.user.id);
+    if (await sha(d.o) !== u.passHash) { flash("Sandi lama salah.", "err"); render(); return; }
+    u.passHash = await sha(d.n);
+    /* [KERENTANAN #2 - lanjutan] sesi lain TIDAK dicabut setelah sandi diganti. */
+    save(); flash("Sandi berhasil diubah."); render();
+  }
+};
+
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const a = b.dataset.act, v = b.dataset.v;
+  if (a === "logout") logout();
+  else if (a === "tab") { state.tab = v; state.flash = ""; render(); }
+  else if (a === "reset") {
+    if (!need("admin")) return;
+    const p = prompt("Sandi baru (min 8 karakter):");
+    if (p && p.length >= 8) { userById(v).passHash = await sha(p); save(); flash("Sandi direset."); }
+    else if (p !== null) flash("Sandi minimal 8 karakter.", "err");
+    render();
+  } else if (a === "del") {
+    if (!need("admin")) return;
+    if (confirm("Hapus akun ini?")) {
+      db.users = db.users.filter(u => u.id !== v);
+      for (const t of Object.keys(db.sessions)) if (db.sessions[t] === v) delete db.sessions[t];
+      save(); flash("Akun dihapus.");
+    }
+    render();
+  }
+});
+document.addEventListener("change", e => {
+  if (e.target.dataset && e.target.dataset.act === "course") { state.course = e.target.value; render(); }
+});
+document.addEventListener("submit", async e => {
+  const f = e.target.closest("[data-form]"); if (!f) return;
+  e.preventDefault();
+  await forms[f.dataset.form](Object.fromEntries(new FormData(f)), f);
+});
+
+(async () => { await initDb(); restore(); render(); })();
+</script>
+</body>
+</html>

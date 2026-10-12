@@ -1,4 +1,4 @@
-# Portal Akademik Semu
+# SIAKAD Lembah Cahaya
 
 Portal kampus **fiktif** untuk latihan keamanan web. Seluruh akun dan data bersifat sintetis dan disimpan di `localStorage` browser (tanpa backend), sehingga bisa dihosting di GitHub Pages.
 
@@ -16,12 +16,12 @@ Portal kampus **fiktif** untuk latihan keamanan web. Seluruh akun dan data bersi
 
 | Username | Sandi | Peran |
 |---|---|---|
-| admin.semu | Admin#Semu2026 | admin |
-| dosen.rahma | Dosen#Rahma26 | dosen |
-| dosen.bima | Dosen#Bima26 | dosen |
-| mhs.arkana | Mhs#Arkana26 | mahasiswa |
-| mhs.zahra | Mhs#Zahra26 | mahasiswa |
-| mhs.dimas | Mhs#Dimas26 | mahasiswa |
+| admin.cahaya | Admin#Cahaya2026 | admin |
+| dosen.laras | Dosen#Laras26 | dosen |
+| dosen.hendra | Dosen#Hendra26 | dosen |
+| mhs.nadira | Mhs#Nadira26 | mahasiswa |
+| mhs.farel | Mhs#Farel26 | mahasiswa |
+| mhs.salsa | Mhs#Salsa26 | mahasiswa |
 
 ## Cara deploy ke GitHub Pages
 
